@@ -12,10 +12,10 @@
 #include <iomanip>
 #include <limits>
 #include <omp.h>
-#include "my_func/include.hpp"
-#include "my_mesh/include.hpp"
-#include "my_plot/include.hpp"
-#include "my_efield/include.hpp"
+#include "DSM_THzHHG_LuWang/my_func/include.hpp"
+#include "DSM_THzHHG_LuWang/my_mesh/include.hpp"
+#include "DSM_THzHHG_LuWang/my_plot/include.hpp"
+#include "DSM_THzHHG_LuWang/my_efield/include.hpp"
 
 int main(int argc, char **argv){ 
 
@@ -23,7 +23,7 @@ int main(int argc, char **argv){
 //define input pulse parameters
 //---------------------------------------------------------
 //omp_set_num_threads(omp_get_max_threads());
-//omp_set_num_threads(56);
+omp_set_num_threads(56);
     
 double T_arr[]= {77};                                                                 //set the temperature scan values
  for (double T_n : T_arr){  
@@ -37,26 +37,22 @@ mytime time_count;
 time_count.start();
 
 
-double tau_fwhm1  = 150e-15;                                                          //Input pulse fwhm
-double tau1       = tau_fwhm1/(sqrt(2*log(2)));                                       //Converting from FWHM to 1/e^2 value. e^(-t^2/(2*tau^2))
-double tau2       =tau1;
-double f_max      = 4e12;                                                             //2*f_max =frequency range ,120
-double df         = 0.05e12;                                                          //frequency step size
+double f_max      = 30e12;                                                             //2*f_max =frequency range 
+double df         = 0.05e12;                                                           //frequency step size
 double f_thz_3h=1e12;                                                                 //fundamental thz center frequency
-
+double E_01=E_n;                                                                      //V/m
+double s=33;                                                                          // the  s thing you use in your paper
 //---------------------------------------------------------
 //define DSM parameters
 //---------------------------------------------------------
 
-double L=10.05e-9;                                                                      // DSM length
+double L=10.05e-9;                                                                     // DSM length
 double L_save=10e-9;
 double dz=0.5e-12;
-int N_z=1000;                                                                           //saving eff array size
+int N_z=10;                                                                            //saving eff array size
 MESH::spacial_z z(L,L_save,dz,N_z);
 
-
-
-std::vector<double> v{1.28*1e6,1.3*1e6,0.33*1e6};                                      // [m/s] fermi velocity vx,vy,vz
+std::vector<double> v{1.28*1e6,1.3*1e6,0.33*1e6};                                       // [m/s] fermi velocity vx,vy,vz
 double T=T_n;                                                                           // temperature           
 double E_fermi=0.45*C.e;                                                                // [J] fermi energy =chemical potential   
 double gamma_e=1/(150e-15);                                                             // inter band decay rate
@@ -65,28 +61,22 @@ double gamma_i=gamma_e;                                                         
 //define time space mesh
 //---------------------------------------------------------
 int NN_f=2*(f_max/df);
-int N_f=NN_f-(NN_f%4);                                                                       // N_f , N_f_thz even
+int N_f=NN_f-(NN_f%4);                                                                   // N_f , N_f_thz even
 int N_f_thz=N_f;
 MESH::time_frequency tf(N_f, N_f_thz,df,f_thz_3h);
 
-
-tf.N_thz_3h=f_thz_3h/df;
-tf.f_thz_3h=f_thz_3h;
 //---------------------------------------------------------
 // material class with chi1 chi3
 //---------------------------------------------------------
 cd3as2 chi(v,E_fermi,gamma_e,gamma_i,T);
 chi.assign_chi1(tf);
 chi.assign_sigma3(tf);
-  
 
 //---------------------------------------------------------
 // define input electric fields
 //---------------------------------------------------------
 
-double E_01=E_n;        //1e7                                                             //V/m
-int s=33;               // the  s thing you use in your paper
-EW::E_field E(tf,chi,tau1,tau2,E_01,s);
+EW::E_field E(tf,chi,E_01,s);
 
 // ---------------------------------------------------------
 // define Fourier transform
@@ -98,7 +88,7 @@ fftw.assign();
 // initialize saving path 
 // ---------------------------------------------------------
 
-std::string save_path=make_string(E_01,T,tau_fwhm1,E_fermi,dz,C,gamma_e);
+std::string save_path=make_string(E_01,T,tf.tau_fwhm,E_fermi,dz,C,gamma_e);
 // --------------------------------------------------------------
 // numerical method RK method initialization//lowest storage rk method
 // ---------------------------------------------------------
@@ -115,7 +105,7 @@ python_plot mypython(save_path);
 
 
 for (int k=0;k<z.N_total;k++){
-       //set new z and new inter_z each 
+   
        z.z_p=dz*k;
        RK.method(E,fftw,chi,z.z_p,tf,mypython);
        my_data.save_loop(k,z,fftw,mypython,E,tf,chi);
